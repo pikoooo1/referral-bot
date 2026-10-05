@@ -1,33 +1,39 @@
 import os
 import sqlite3
-import threading
-from flask import Flask
+from multiprocessing import Process
+from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot import types
 
-# ----------------- خادم ويب وهمي لإبقاء السيرفر نشطاً -----------------
-app = Flask(__name__)
+# ----------------- خادم ويب مستقل خفيف جداً يمنع الانهيار -----------------
+class SimpleHealthCheck(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header("Content-type", "text/plain")
+        self.end_headers()
+        self.wfile.write(b"Bot is active")
 
-@app.route('/')
-def home():
-    return "Bot is alive and running!"
+    def do_HEAD(self):
+        self.send_response(200)
+        self.end_headers()
 
-def run_web():
-    port = int(os.environ.get("PORT", 8080))
-    app.run(host="0.0.0.0", port=port)
+def start_server():
+    port = int(os.environ.get("PORT", 10000))
+    server = HTTPServer(("0.0.0.0", port), SimpleHealthCheck)
+    server.serve_forever()
 
 # ----------------- Configuration -----------------
 TOKEN = "8804442574:AAElbs8kEo5H98gOhSA1FrODBFRBDGy9Z_w"
 ADMIN_ID = 6569755457
 REQUIRED_REFERRALS = 3
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, threaded=False)
 
 # ----------------- Database Setup -----------------
-conn = sqlite3.connect("referral_bot.db", check_same_thread=False)
+conn = sqlite3.connect('referral_bot.db', check_same_thread=False)
 cursor = conn.cursor()
 
-cursor.execute("""
+cursor.execute('''
 CREATE TABLE IF NOT EXISTS users (
     user_id INTEGER PRIMARY KEY,
     first_name TEXT,
@@ -35,14 +41,14 @@ CREATE TABLE IF NOT EXISTS users (
     referral_count INTEGER DEFAULT 0,
     reward_claimed INTEGER DEFAULT 0
 )
-""")
+''')
 
-cursor.execute("""
+cursor.execute('''
 CREATE TABLE IF NOT EXISTS settings (
     key TEXT PRIMARY KEY,
     value TEXT
 )
-""")
+''')
 
 cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('reward_link', 'https://whop.com/')")
 conn.commit()
@@ -198,11 +204,11 @@ def handle_admin_inputs(message):
         bot.send_message(ADMIN_ID, f"✅ Broadcast sent successfully to `{sent_count}` users!")
         admin_states[ADMIN_ID] = None
 
-# ----------------- تشغيل السيرفر والبوت -----------------
+# ----------------- Start Execution -----------------
 if __name__ == "__main__":
-    t = threading.Thread(target=run_web)
-    t.daemon = True
-    t.start()
-    
-    print("Bot is running with keep-alive web server...")
-    bot.infinity_polling()
+    web_proc = Process(target=start_server)
+    web_proc.daemon = True
+    web_proc.start()
+
+    print("Bot is successfully running...")
+    bot.infinity_polling(timeout=10, long_polling_timeout=5)
