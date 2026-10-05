@@ -23,7 +23,7 @@ def start_server():
     server.serve_forever()
 
 # ----------------- Configuration -----------------
-TOKEN = "8804442574:AAElbs8kEo5H98gOhSA1FrODBFRBDGy9Z_w"
+TOKEN = "8804442574:AAGyi9gNetSUAe80IXOpZbBq_jzAaTqWdm4"
 ADMIN_ID = 6569755457
 REQUIRED_REFERRALS = 3
 
