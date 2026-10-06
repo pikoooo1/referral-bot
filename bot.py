@@ -30,7 +30,6 @@ GROUP_CHAT_ID = "@pro_ge"
 GROUP_INVITE_LINK = "https://t.me/pro_ge"
 
 DEFAULT_REQUIRED_REFS = 2
-# رابط العمولة الخاص بك على GamsGo
 DEFAULT_REWARD_URL = "https://www.gamsgo.com/partner/RgRWm"
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
@@ -107,7 +106,7 @@ def send_dashboard(user_id, first_name):
 
     if my_count >= req_refs:
         reward_url = get_setting('reward_link', DEFAULT_REWARD_URL)
-        btn_claim = types.InlineKeyboardButton("🎁 Claim Your Gemini Pro Access Now", url=reward_url)
+        btn_claim = types.InlineKeyboardButton("🎁 Claim Your Gemini Pro Access", url=reward_url)
         markup.add(btn_claim)
 
     progress_bar = "█" * min(my_count, req_refs) + "░" * max(0, req_refs - my_count)
@@ -128,7 +127,7 @@ def send_dashboard(user_id, first_name):
 
 admin_states = {}
 
-# ----------------- User Message Handlers -----------------
+# ----------------- Start Command -----------------
 @bot.message_handler(commands=['start'])
 def handle_start(message):
     user_id = message.from_user.id
@@ -219,55 +218,6 @@ def handle_verification_callback(call):
     else:
         bot.answer_callback_query(call.id, "❌ You haven't joined yet. Please join the group and retry.", show_alert=True)
 
-# ----------------- Quick Reply Keyboard Actions -----------------
-@bot.message_handler(func=lambda msg: True and not msg.text.startswith('/'))
-def handle_quick_buttons(message):
-    user_id = message.from_user.id
-    first_name = message.from_user.first_name or "Friend"
-    text = message.text.strip()
-    req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
-
-    if not is_member_of_group(GROUP_CHAT_ID, user_id):
-        handle_start(message)
-        return
-
-    cursor.execute("SELECT referral_count FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    count = row[0] if row else 0
-
-    if "Referral Link" in text or "My Progress" in text:
-        send_dashboard(user_id, first_name)
-
-    elif "Claim Reward" in text:
-        if count >= req_refs:
-            reward_url = get_setting('reward_link', DEFAULT_REWARD_URL)
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🎁 Claim Gemini Pro Access", url=reward_url))
-            bot.send_message(
-                user_id,
-                "🎉 **Congratulations!** Your exclusive reward voucher is ready.\n\n"
-                "Click the button below to visit our official access provider and activate your Gemini Pro:",
-                reply_markup=markup,
-                parse_mode="Markdown"
-            )
-        else:
-            remaining = req_refs - count
-            bot.send_message(
-                user_id,
-                f"🔒 **Locked!** You need **{remaining} more referral(s)** to unlock Gemini Pro access.",
-                parse_mode="Markdown"
-            )
-
-    elif "Rules & Help" in text or "Help" in text:
-        help_text = (
-            "📌 **Rules & Instructions:**\n\n"
-            f"1️⃣ **Join the Community:** You must stay inside {GROUP_INVITE_LINK}.\n"
-            f"2️⃣ **Invite Friends:** Share your unique invite link with friends. You need **{req_refs} valid referrals**.\n"
-            f"3️⃣ **Instant Reward:** Once unlocked, you receive immediate access via our partner activation portal.\n\n"
-            "⚠️ **Anti-Fraud Note:** Bots or duplicate accounts are rejected automatically."
-        )
-        bot.send_message(user_id, help_text, parse_mode="Markdown")
-
 # ----------------- Admin Panel -----------------
 @bot.message_handler(commands=['admin'])
 def handle_admin(message):
@@ -331,6 +281,56 @@ def handle_admin_actions(call):
         admin_states[ADMIN_ID] = "awaiting_broadcast"
         bot.send_message(ADMIN_ID, "✍️ Send the message you want to broadcast to all members:")
 
+# ----------------- Quick Reply Keyboard Actions (Direct Matching) -----------------
+@bot.message_handler(func=lambda msg: msg.text and any(word in msg.text.lower() for word in ['rules', 'help', 'progress', 'referral', 'claim']))
+def handle_quick_buttons(message):
+    user_id = message.from_user.id
+    first_name = message.from_user.first_name or "Friend"
+    text = message.text.lower()
+    req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
+
+    if not is_member_of_group(GROUP_CHAT_ID, user_id):
+        handle_start(message)
+        return
+
+    cursor.execute("SELECT referral_count FROM users WHERE user_id = ?", (user_id,))
+    row = cursor.fetchone()
+    count = row[0] if row else 0
+
+    if 'rules' in text or 'help' in text:
+        help_text = (
+            "📌 **Rules & Instructions:**\n\n"
+            f"1️⃣ **Join the Community:** You must stay inside {GROUP_INVITE_LINK} to remain eligible.\n\n"
+            f"2️⃣ **Invite Friends:** Share your unique referral link with your network. You need **{req_refs} valid referrals**.\n\n"
+            f"3️⃣ **Instant Reward:** Once {req_refs} people join via your link, your Gemini Pro reward unlocks immediately!\n\n"
+            "⚠️ **Anti-Fraud Notice:** Duplicate accounts, self-referrals, or bot accounts are detected and disqualified automatically."
+        )
+        bot.send_message(user_id, help_text, parse_mode="Markdown")
+
+    elif 'claim' in text:
+        if count >= req_refs:
+            reward_url = get_setting('reward_link', DEFAULT_REWARD_URL)
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("🎁 Access Gemini Pro", url=reward_url))
+            bot.send_message(
+                user_id,
+                "🎉 **Congratulations!** Your exclusive reward voucher is unlocked.\n\n"
+                "Tap below to claim your access via our partner activation portal:",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
+        else:
+            remaining = req_refs - count
+            bot.send_message(
+                user_id,
+                f"🔒 **Locked!** You need **{remaining} more referral(s)** to unlock Gemini Pro access.",
+                parse_mode="Markdown"
+            )
+
+    elif 'referral' in text or 'progress' in text:
+        send_dashboard(user_id, first_name)
+
+# ----------------- Admin Free-Text Input Handler -----------------
 @bot.message_handler(func=lambda msg: msg.from_user.id == ADMIN_ID and admin_states.get(ADMIN_ID) is not None)
 def handle_admin_state_input(message):
     state = admin_states.get(ADMIN_ID)
