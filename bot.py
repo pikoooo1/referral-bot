@@ -34,11 +34,10 @@ GROUP_INVITE_LINK = "https://t.me/pro_ge"
 DEFAULT_REQUIRED_REFS = 2
 AFFILIATE_URL = "https://www.gamsgo.com/partner/RgRWm"
 FREE_GEMINI_URL = "https://gemini.google.com"
-STARS_PRICE = 2
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
-# ----------------- إعداد قاعدة البيانات -----------------
+# ----------------- قاعدة البيانات -----------------
 conn = sqlite3.connect('referral_bot.db', check_same_thread=False)
 cursor = conn.cursor()
 
@@ -63,7 +62,6 @@ CREATE TABLE IF NOT EXISTS settings (
 cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('affiliate_link', ?)", (AFFILIATE_URL,))
 cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('free_link', ?)", (FREE_GEMINI_URL,))
 cursor.execute("INSERT OR IGNORE INTO settings (key, value) VALUES ('required_refs', ?)", (str(DEFAULT_REQUIRED_REFS),))
-cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('stars_price', ?)", (str(STARS_PRICE),))
 conn.commit()
 
 def get_setting(key, default):
@@ -92,9 +90,8 @@ def get_main_keyboard():
     btn_link = types.KeyboardButton("🔗 My Referral Link")
     btn_status = types.KeyboardButton("📊 My Progress")
     btn_claim = types.KeyboardButton("🎁 Claim Reward")
-    btn_buy = types.KeyboardButton("⚡ Buy Instant Access (2 ⭐)")
     markup.add(btn_link, btn_status)
-    markup.add(btn_claim, btn_buy)
+    markup.add(btn_claim)
     return markup
 
 def get_reward_markup():
@@ -111,12 +108,10 @@ def send_dashboard(user_id, first_name):
     bot_username = bot.get_me().username
     ref_link = f"https://t.me/{bot_username}?start={user_id}"
     req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
-    stars = get_setting('stars_price', STARS_PRICE)
 
     cursor.execute("SELECT referral_count, reward_claimed FROM users WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     my_count = row[0] if row else 0
-    claimed = row[1] if row else 0
 
     share_url = f"https://t.me/share/url?url={ref_link}&text=Unlock%20Google%20Gemini%20access%20for%20free!"
 
@@ -124,37 +119,33 @@ def send_dashboard(user_id, first_name):
     btn_share = types.InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
     markup.add(btn_share)
 
-    if my_count >= req_refs or claimed == 1:
+    if my_count >= req_refs:
         affiliate_url = get_setting('affiliate_link', AFFILIATE_URL)
         free_url = get_setting('free_link', FREE_GEMINI_URL)
         markup.add(
             types.InlineKeyboardButton("✨ Get Gemini Free Access", url=free_url),
             types.InlineKeyboardButton("💎 Upgrade to Gemini Pro (Discounted)", url=affiliate_url)
         )
-    else:
-        btn_buy_instant = types.InlineKeyboardButton(f"⚡ Skip & Unlock Instantly ({stars} ⭐)", callback_data="buy_stars_invoice")
-        markup.add(btn_buy_instant)
 
     progress_bar = "█" * min(my_count, req_refs) + "░" * max(0, req_refs - my_count)
 
     msg = (
         f"👋 **Welcome, {first_name}!**\n\n"
         f"Unlock **Google Gemini Access** in 2 easy steps:\n"
-        f"1️⃣ Stay inside our group: [Join Group]({GROUP_INVITE_LINK})\n"
+        f"1️⃣ Stay inside our official group: [Join Group]({GROUP_INVITE_LINK})\n"
         f"2️⃣ Invite **{req_refs} active friends** using your personal link.\n\n"
         f"📊 **Your Progress:** `[{progress_bar}] {my_count}/{req_refs}`\n"
-        f"🔗 **Your Unique Referral Link:**\n`{ref_link}`\n\n"
-        f"💡 *Don't want to wait? You can unlock instant access for just {stars} ⭐!*"
+        f"🔗 **Your Unique Referral Link:**\n`{ref_link}`"
     )
 
-    if my_count >= req_refs or claimed == 1:
-        msg += "\n\n🎉 **Access Unlocked!** Choose your access option below:"
+    if my_count >= req_refs:
+        msg += "\n\n🎉 **Target Reached!** Choose your access option below:"
 
     bot.send_message(user_id, msg, parse_mode="Markdown", reply_markup=markup)
 
 admin_states = {}
 
-# ----------------- لوحة تحكم المشرف -----------------
+# ----------------- لوحة تحكم المشرف (أولوية عليا) -----------------
 @bot.message_handler(commands=['admin'])
 def handle_admin(message):
     if message.from_user.id != ADMIN_ID:
@@ -195,14 +186,14 @@ def handle_admin_actions(call):
         total_invites = cursor.fetchone()[0] or 0
 
         req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
-        cursor.execute("SELECT COUNT(*) FROM users WHERE referral_count >= ? OR reward_claimed = 1", (req_refs,))
+        cursor.execute("SELECT COUNT(*) FROM users WHERE referral_count >= ?", (req_refs,))
         eligible = cursor.fetchone()[0]
 
         stats_summary = (
             f"📊 **System Statistics:**\n\n"
             f"👥 Total Users: `{total_users}`\n"
             f"🔗 Total Referrals: `{total_invites}`\n"
-            f"🏆 Unlocked Rewards: `{eligible}`\n\n"
+            f"🏆 Completed Targets: `{eligible}`\n\n"
             f"🎯 Target Required: `{req_refs} invites`\n"
             f"🌐 Current Affiliate URL:\n{get_setting('affiliate_link', AFFILIATE_URL)}"
         )
@@ -214,7 +205,7 @@ def handle_admin_actions(call):
         btn_2 = types.InlineKeyboardButton("2 Refs", callback_data="setref_2")
         btn_3 = types.InlineKeyboardButton("3 Refs", callback_data="setref_3")
         btn_5 = types.InlineKeyboardButton("5 Refs", callback_data="setref_5")
-        btn_custom = types.InlineKeyboardButton("✏ Custom Number", callback_data="setref_custom")
+        btn_custom = types.InlineKeyboardButton("✏️️ Custom Number", callback_data="setref_custom")
         markup.add(btn_1, btn_2, btn_3, btn_5)
         markup.add(btn_custom)
 
@@ -232,7 +223,7 @@ def handle_admin_actions(call):
 
     elif action == "admin_broadcast":
         admin_states[ADMIN_ID] = "awaiting_broadcast"
-        bot.send_message(ADMIN_ID, "✍️ Send the message you want to broadcast to all members:")
+        bot.send_message(ADMIN_ID, "✍️ Send the text message to broadcast to all members:")
 
 @bot.callback_query_handler(func=lambda call: call.data.startswith('setref_'))
 def handle_setref_buttons(call):
@@ -290,56 +281,14 @@ def handle_admin_text_inputs(message):
             try:
                 bot.send_message(row[0], content)
                 delivered += 1
-                time.sleep(0.05)
+                time.sleep(0.05)  # حماية من حظر تيليجرام
             except Exception:
                 pass
 
         bot.send_message(ADMIN_ID, f"✅ Broadcast sent to `{delivered}` users!", parse_mode="Markdown")
         admin_states[ADMIN_ID] = None
 
-# ----------------- الدفع بنجوم تيليجرام -----------------
-def send_invoice(chat_id):
-    price_stars = int(get_setting('stars_price', STARS_PRICE))
-    prices = [types.LabeledPrice(label="Instant Gemini Access", amount=price_stars)]
-    try:
-        bot.send_invoice(
-            chat_id=chat_id,
-            title="⚡ Instant Gemini Access",
-            description=f"Skip inviting friends and unlock instant Gemini access for only {price_stars} Stars!",
-            invoice_payload="instant_access_payload",
-            provider_token="",
-            currency="XTR",
-            prices=prices,
-            start_parameter="instant-access"
-        )
-    except Exception:
-        bot.send_message(chat_id, "⚠️ Error creating payment invoice. Please try again later.")
-
-@bot.callback_query_handler(func=lambda call: call.data == "buy_stars_invoice")
-def handle_buy_invoice_callback(call):
-    send_invoice(call.from_user.id)
-    bot.answer_callback_query(call.id)
-
-@bot.pre_checkout_query_handler(func=lambda query: True)
-def process_pre_checkout(pre_checkout_query):
-    bot.answer_pre_checkout_query(pre_checkout_query.id, ok=True)
-
-@bot.message_handler(content_types=['successful_payment'])
-def process_successful_payment(message):
-    user_id = message.from_user.id
-    cursor.execute("UPDATE users SET reward_claimed = 1 WHERE user_id = ?", (user_id,))
-    conn.commit()
-
-    bot.send_message(
-        user_id,
-        "🎉 **Payment Successful!**\n\n"
-        "Your access has been unlocked instantly without inviting friends.\n"
-        "Select your access option below:",
-        reply_markup=get_reward_markup(),
-        parse_mode="Markdown"
-    )
-
-# ----------------- الترحيب في المجموعة -----------------
+# ----------------- الترحيب بالأعضاء الجدد داخل المجموعة -----------------
 @bot.message_handler(content_types=['new_chat_members'])
 def handle_new_group_member(message):
     bot_username = bot.get_me().username
@@ -408,6 +357,7 @@ def handle_start(message):
                 except Exception:
                     pass
 
+    # فحص الاشتراك الإجباري
     if not is_member_of_group(GROUP_CHAT_ID, user_id):
         markup = types.InlineKeyboardMarkup()
         btn_group = types.InlineKeyboardButton("👥 Join Group First", url=GROUP_INVITE_LINK)
@@ -417,7 +367,7 @@ def handle_start(message):
 
         verification_text = (
             f"Hello {first_name}! 🚀\n\n"
-            f"⚠️️ **Access Required:**\n"
+            f"⚠️ **Access Required:**\n"
             f"Please join our community group before activating the bot:\n\n"
             f"1. Click the button below to join the group.\n"
             f"2. Return here and tap **I Have Joined (Verify)**."
@@ -443,8 +393,8 @@ def handle_verification_callback(call):
     else:
         bot.answer_callback_query(call.id, "❌ You haven't joined yet. Please join the group and retry.", show_alert=True)
 
-# ----------------- أزرار الكيبورد -----------------
-@bot.message_handler(func=lambda msg: msg.text and any(w in msg.text.lower() for w in ['referral', 'progress', 'claim', 'buy']))
+# ----------------- معالجة أزرار المستخدم مع فحص بقاء العضو -----------------
+@bot.message_handler(func=lambda msg: msg.text and any(w in msg.text.lower() for w in ['referral', 'progress', 'claim']))
 def handle_quick_buttons(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name or "Friend"
@@ -455,16 +405,12 @@ def handle_quick_buttons(message):
         handle_start(message)
         return
 
-    cursor.execute("SELECT referral_count, reward_claimed FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT referral_count FROM users WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     count = row[0] if row else 0
-    claimed = row[1] if row else 0
 
-    if 'buy' in text:
-        send_invoice(user_id)
-
-    elif 'claim' in text:
-        if count >= req_refs or claimed == 1:
+    if 'claim' in text:
+        if count >= req_refs:
             bot.send_message(
                 user_id,
                 "🎉 **Congratulations!** Your reward options are unlocked.\n\n"
@@ -475,20 +421,15 @@ def handle_quick_buttons(message):
             )
         else:
             remaining = req_refs - count
-            stars = get_setting('stars_price', STARS_PRICE)
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton(f"⚡ Skip & Buy Instantly ({stars} ⭐)", callback_data="buy_stars_invoice"))
             bot.send_message(
                 user_id,
-                f"🔒 **Locked!** You need **{remaining} more referral(s)** to unlock access.\n\n"
-                f"Or you can unlock it immediately using Telegram Stars:",
-                reply_markup=markup,
+                f"🔒 **Locked!** You need **{remaining} more referral(s)** to unlock access.",
                 parse_mode="Markdown"
             )
     else:
         send_dashboard(user_id, first_name)
 
-# ----------------- تشغيل السيرفر -----------------
+# ----------------- دورة التشغيل المحمية لتفادي أخطاء 409 -----------------
 if __name__ == "__main__":
     proc = Process(target=run_web_server)
     proc.daemon = True
