@@ -30,7 +30,8 @@ GROUP_CHAT_ID = "@pro_ge"
 GROUP_INVITE_LINK = "https://t.me/pro_ge"
 
 DEFAULT_REQUIRED_REFS = 2
-DEFAULT_REWARD_URL = "https://gemini.google.com/advanced"
+# رابط العمولة الخاص بك على GamsGo
+DEFAULT_REWARD_URL = "https://www.gamsgo.com/partner/RgRWm"
 
 bot = telebot.TeleBot(TOKEN, threaded=False)
 
@@ -98,8 +99,7 @@ def send_dashboard(user_id, first_name):
     row = cursor.fetchone()
     my_count = row[0] if row else 0
 
-    share_text = f"🔥 Unlock Google Gemini Pro for free! Join through my link: {ref_link}"
-    share_url = f"https://t.me/share/url?url={ref_link}&text=Unlock%20Google%20Gemini%20Pro%20for%20free!"
+    share_url = f"https://t.me/share/url?url={ref_link}&text=Unlock%20Google%20Gemini%20Pro%20access%20for%20free!"
 
     markup = types.InlineKeyboardMarkup()
     btn_share = types.InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
@@ -107,22 +107,22 @@ def send_dashboard(user_id, first_name):
 
     if my_count >= req_refs:
         reward_url = get_setting('reward_link', DEFAULT_REWARD_URL)
-        btn_claim = types.InlineKeyboardButton("🎁 Claim Gemini Pro Access", url=reward_url)
+        btn_claim = types.InlineKeyboardButton("🎁 Claim Your Gemini Pro Access Now", url=reward_url)
         markup.add(btn_claim)
 
     progress_bar = "█" * min(my_count, req_refs) + "░" * max(0, req_refs - my_count)
 
     msg = (
         f"👋 **Welcome, {first_name}!**\n\n"
-        f"Get exclusive free access to **Google Gemini Pro** by completing 2 easy steps:\n"
-        f"1️⃣ Join our official discussion group: [Join Group]({GROUP_INVITE_LINK})\n"
-        f"2️⃣ Invite **{req_refs} active friends** using your unique invitation link.\n\n"
+        f"Unlock **Google Gemini Pro Access** in 2 quick steps:\n"
+        f"1️⃣ Stay in our official group: [Join Group]({GROUP_INVITE_LINK})\n"
+        f"2️⃣ Invite **{req_refs} active friends** using your invite link.\n\n"
         f"📊 **Your Progress:** `[{progress_bar}] {my_count}/{req_refs}`\n"
         f"🔗 **Your Unique Referral Link:**\n`{ref_link}`"
     )
 
     if my_count >= req_refs:
-        msg += "\n\n🎉 **Congratulations! Target Achieved.**\nClick the button below to claim your Gemini Pro access now!"
+        msg += "\n\n🎉 **Target Reached!** Click the button below to claim your access via our partner portal:"
 
     bot.send_message(user_id, msg, parse_mode="Markdown", reply_markup=markup)
 
@@ -166,21 +166,24 @@ def handle_start(message):
                     bot.send_message(
                         referrer_id,
                         f"🎉 **New Referral Joined!**\n"
-                        f"A new friend joined via your invite link.\n\n"
+                        f"A friend joined via your invite link.\n\n"
                         f"📊 Progress: `[{bar}] {count}/{req_refs}`"
                     )
                     if count >= req_refs and claimed == 0:
                         reward_link = get_setting('reward_link', DEFAULT_REWARD_URL)
+                        markup = types.InlineKeyboardMarkup()
+                        markup.add(types.InlineKeyboardButton("🎁 Claim Gemini Pro", url=reward_link))
                         bot.send_message(
                             referrer_id,
                             f"🏆 **Goal Achieved!**\n"
-                            f"You have successfully referred {req_refs} friends.\n"
-                            f"🎁 Click here to claim your Gemini Pro: {reward_link}"
+                            f"You have referred {req_refs} friends.\n"
+                            f"Click below to claim your access voucher on our partner portal:",
+                            reply_markup=markup
                         )
                 except Exception:
                     pass
 
-    # Verification: Mandatory Group Membership Check
+    # Verification: Group Membership
     if not is_member_of_group(GROUP_CHAT_ID, user_id):
         markup = types.InlineKeyboardMarkup()
         btn_group = types.InlineKeyboardButton("👥 Join Group First", url=GROUP_INVITE_LINK)
@@ -191,8 +194,8 @@ def handle_start(message):
         verification_text = (
             f"Hello {first_name}! 🚀\n\n"
             f"⚠️ **Access Required:**\n"
-            f"You must join our community group before activating the bot:\n\n"
-            f"1. Tap the button below to join the group.\n"
+            f"Please join our community group before activating the bot:\n\n"
+            f"1. Click the button below to join the group.\n"
             f"2. Return here and tap **I Have Joined (Verify)**."
         )
         bot.send_message(user_id, verification_text, parse_mode="Markdown", reply_markup=markup)
@@ -217,10 +220,11 @@ def handle_verification_callback(call):
         bot.answer_callback_query(call.id, "❌ You haven't joined yet. Please join the group and retry.", show_alert=True)
 
 # ----------------- Quick Reply Keyboard Actions -----------------
-@bot.message_handler(func=lambda msg: msg.text in ["🔗 My Referral Link", "📊 My Progress", "🎁 Claim Reward", "ℹ️ Rules & Help"])
+@bot.message_handler(func=lambda msg: True and not msg.text.startswith('/'))
 def handle_quick_buttons(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name or "Friend"
+    text = message.text.strip()
     req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
 
     if not is_member_of_group(GROUP_CHAT_ID, user_id):
@@ -231,30 +235,36 @@ def handle_quick_buttons(message):
     row = cursor.fetchone()
     count = row[0] if row else 0
 
-    if message.text in ["🔗 My Referral Link", "📊 My Progress"]:
+    if "Referral Link" in text or "My Progress" in text:
         send_dashboard(user_id, first_name)
 
-    elif message.text == "🎁 Claim Reward":
+    elif "Claim Reward" in text:
         if count >= req_refs:
             reward_url = get_setting('reward_link', DEFAULT_REWARD_URL)
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("🎁 Access Gemini Pro", url=reward_url))
-            bot.send_message(user_id, "🎉 **Congratulations!** Here is your reward:", reply_markup=markup, parse_mode="Markdown")
+            markup.add(types.InlineKeyboardButton("🎁 Claim Gemini Pro Access", url=reward_url))
+            bot.send_message(
+                user_id,
+                "🎉 **Congratulations!** Your exclusive reward voucher is ready.\n\n"
+                "Click the button below to visit our official access provider and activate your Gemini Pro:",
+                reply_markup=markup,
+                parse_mode="Markdown"
+            )
         else:
             remaining = req_refs - count
             bot.send_message(
                 user_id,
-                f"🔒 **Locked!** You need **{remaining} more referral(s)** to unlock the Gemini Pro subscription.",
+                f"🔒 **Locked!** You need **{remaining} more referral(s)** to unlock Gemini Pro access.",
                 parse_mode="Markdown"
             )
 
-    elif message.text == "ℹ️ Rules & Help":
+    elif "Rules & Help" in text or "Help" in text:
         help_text = (
-            "📌 **How it works:**\n\n"
-            f"1. Stay active in our group: {GROUP_INVITE_LINK}\n"
-            f"2. Invite {req_refs} genuine friends with your personal invite link.\n"
-            f"3. Instant reward unlocked upon reaching {req_refs} referrals.\n\n"
-            "⚠️️ Note: Fake or duplicate accounts will be automatically excluded."
+            "📌 **Rules & Instructions:**\n\n"
+            f"1️⃣ **Join the Community:** You must stay inside {GROUP_INVITE_LINK}.\n"
+            f"2️⃣ **Invite Friends:** Share your unique invite link with friends. You need **{req_refs} valid referrals**.\n"
+            f"3️⃣ **Instant Reward:** Once unlocked, you receive immediate access via our partner activation portal.\n\n"
+            "⚠️ **Anti-Fraud Note:** Bots or duplicate accounts are rejected automatically."
         )
         bot.send_message(user_id, help_text, parse_mode="Markdown")
 
@@ -266,7 +276,7 @@ def handle_admin(message):
 
     markup = types.InlineKeyboardMarkup(row_width=2)
     btn_stats = types.InlineKeyboardButton("📊 Stats Overview", callback_data="admin_stats")
-    btn_link = types.InlineKeyboardButton("🔗 Edit Reward URL", callback_data="admin_setlink")
+    btn_link = types.InlineKeyboardButton("🔗 Edit Affiliate URL", callback_data="admin_setlink")
     btn_refs = types.InlineKeyboardButton("🎯 Edit Required Refs", callback_data="admin_setrefs")
     btn_broadcast = types.InlineKeyboardButton("📢 Send Broadcast", callback_data="admin_broadcast")
 
@@ -276,7 +286,7 @@ def handle_admin(message):
 
     bot.send_message(
         ADMIN_ID,
-        "🛠 **Admin Management Dashboard**\nSelect an operation below to manage the bot:",
+        "🛠 **Admin Management Dashboard**\nSelect an option to manage the bot:",
         reply_markup=markup,
         parse_mode="Markdown"
     )
@@ -301,17 +311,17 @@ def handle_admin_actions(call):
 
         stats_summary = (
             f"📊 **System Statistics:**\n\n"
-            f"👥 Total Registered Users: `{total_users}`\n"
-            f"🔗 Total Valid Invitations: `{total_invites}`\n"
-            f"🏆 Users Unlocked Reward: `{eligible}`\n\n"
+            f"👥 Total Users: `{total_users}`\n"
+            f"🔗 Total Referrals: `{total_invites}`\n"
+            f"🏆 Completed Referrals: `{eligible}`\n\n"
             f"🎯 Target Required: `{req_refs} invites`\n"
-            f"🌐 Current Reward Link:\n{get_setting('reward_link', DEFAULT_REWARD_URL)}"
+            f"🌐 Current Affiliate Link:\n{get_setting('reward_link', DEFAULT_REWARD_URL)}"
         )
         bot.edit_message_text(stats_summary, chat_id=ADMIN_ID, message_id=call.message.message_id, parse_mode="Markdown")
 
     elif action == "admin_setlink":
         admin_states[ADMIN_ID] = "awaiting_link"
-        bot.send_message(ADMIN_ID, "✍️ Send the new reward URL (must begin with https://):")
+        bot.send_message(ADMIN_ID, "✍️ Send the new reward/affiliate URL (must begin with https://):")
 
     elif action == "admin_setrefs":
         admin_states[ADMIN_ID] = "awaiting_refs"
@@ -319,7 +329,7 @@ def handle_admin_actions(call):
 
     elif action == "admin_broadcast":
         admin_states[ADMIN_ID] = "awaiting_broadcast"
-        bot.send_message(ADMIN_ID, "✍️️ Send the message you want to broadcast to all bot members:")
+        bot.send_message(ADMIN_ID, "✍️ Send the message you want to broadcast to all members:")
 
 @bot.message_handler(func=lambda msg: msg.from_user.id == ADMIN_ID and admin_states.get(ADMIN_ID) is not None)
 def handle_admin_state_input(message):
@@ -329,9 +339,9 @@ def handle_admin_state_input(message):
         url = message.text.strip()
         if url.startswith("http://") or url.startswith("https://"):
             set_setting("reward_link", url)
-            bot.send_message(ADMIN_ID, f"✅ Reward URL successfully updated:\n{url}")
+            bot.send_message(ADMIN_ID, f"✅ Affiliate URL successfully updated:\n{url}")
         else:
-            bot.send_message(ADMIN_ID, "❌ Invalid format. Please ensure it begins with https://")
+            bot.send_message(ADMIN_ID, "❌ Invalid URL. Please ensure it begins with https://")
         admin_states[ADMIN_ID] = None
 
     elif state == "awaiting_refs":
@@ -365,13 +375,11 @@ def handle_admin_state_input(message):
 
 # ----------------- Main Execution Entry Point -----------------
 if __name__ == "__main__":
-    # Force kill and reset previous hanging webhook/polling sessions to eliminate Error 409
     try:
         bot.remove_webhook(drop_pending_updates=True)
     except Exception:
         pass
 
-    # Launch background keep-alive server
     proc = Process(target=run_web_server)
     proc.daemon = True
     proc.start()
