@@ -5,15 +5,14 @@ from multiprocessing import Process
 from http.server import HTTPServer, BaseHTTPRequestHandler
 import telebot
 from telebot import types
-from telebot.apihelper import ApiTelegramException
 
-# ----------------- خادم ويب خفيف لإبقاء البوت نشطاً على Render -----------------
+# ----------------- خادم ويب خفيف لإبقاء السيرفر نشطاً على Render -----------------
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
         self.send_header("Content-type", "text/plain")
         self.end_headers()
-        self.wfile.write(b"Bot is active and running.")
+        self.wfile.write(b"OK")
 
     def do_HEAD(self):
         self.send_response(200)
@@ -24,8 +23,8 @@ def run_web_server():
     server = HTTPServer(("0.0.0.0", port), HealthCheckHandler)
     server.serve_forever()
 
-# ----------------- الإعدادات والروابط -----------------
-TOKEN = "8804442574:AAGyi9gNetSUAe80IXOpZbBq_jzAaTqWdm4"
+# ----------------- الإعدادات والتوكن الجديد -----------------
+TOKEN = "8804442574:AAFIGwOIF2ApYGHLgsriri3MpW8m0Z3YJmo"
 ADMIN_ID = 6569755457
 
 GROUP_CHAT_ID = "@pro_ge"
@@ -35,7 +34,7 @@ DEFAULT_REQUIRED_REFS = 2
 AFFILIATE_URL = "https://www.gamsgo.com/partner/RgRWm"
 FREE_GEMINI_URL = "https://gemini.google.com"
 
-bot = telebot.TeleBot(TOKEN, threaded=False)
+bot = telebot.TeleBot(TOKEN, threaded=True)
 
 # ----------------- قاعدة البيانات -----------------
 conn = sqlite3.connect('referral_bot.db', check_same_thread=False)
@@ -73,51 +72,44 @@ def set_setting(key, value):
     cursor.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", (key, str(value)))
     conn.commit()
 
-# ----------------- الدوال المساعدة -----------------
-def is_member_of_group(chat_id, user_id):
+# ----------------- دوال مساعدة -----------------
+def is_member(user_id):
     if user_id == ADMIN_ID:
         return True
     try:
-        member = bot.get_chat_member(chat_id, user_id)
-        if member.status in ['creator', 'administrator', 'member']:
-            return True
-        return False
+        member = bot.get_chat_member(GROUP_CHAT_ID, user_id)
+        return member.status in ['creator', 'administrator', 'member']
     except Exception:
         return False
 
-def get_main_keyboard():
+def main_keyboard():
     markup = types.ReplyKeyboardMarkup(resize_keyboard=True, row_width=2)
-    btn_link = types.KeyboardButton("🔗 My Referral Link")
-    btn_status = types.KeyboardButton("📊 My Progress")
-    btn_claim = types.KeyboardButton("🎁 Claim Reward")
-    markup.add(btn_link, btn_status)
-    markup.add(btn_claim)
+    markup.add(types.KeyboardButton("🔗 My Referral Link"), types.KeyboardButton("📊 My Progress"))
+    markup.add(types.KeyboardButton("🎁 Claim Reward"))
     return markup
 
-def get_reward_markup():
+def reward_keyboard():
     affiliate_url = get_setting('affiliate_link', AFFILIATE_URL)
     free_url = get_setting('free_link', FREE_GEMINI_URL)
-
     markup = types.InlineKeyboardMarkup(row_width=1)
-    btn_free = types.InlineKeyboardButton("✨ Get Gemini Free Access (Instant)", url=free_url)
-    btn_pro = types.InlineKeyboardButton("💎 Upgrade to Gemini Pro (Partner Discount)", url=affiliate_url)
-    markup.add(btn_free, btn_pro)
+    markup.add(
+        types.InlineKeyboardButton("✨ Get Gemini Free Access", url=free_url),
+        types.InlineKeyboardButton("💎 Upgrade to Gemini Pro (Discounted)", url=affiliate_url)
+    )
     return markup
 
 def send_dashboard(user_id, first_name):
-    bot_username = bot.get_me().username
-    ref_link = f"https://t.me/{bot_username}?start={user_id}"
+    bot_info = bot.get_me()
+    ref_link = f"https://t.me/{bot_info.username}?start={user_id}"
     req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
 
-    cursor.execute("SELECT referral_count, reward_claimed FROM users WHERE user_id = ?", (user_id,))
+    cursor.execute("SELECT referral_count FROM users WHERE user_id = ?", (user_id,))
     row = cursor.fetchone()
     my_count = row[0] if row else 0
 
-    share_url = f"https://t.me/share/url?url={ref_link}&text=Unlock%20Google%20Gemini%20access%20for%20free!"
-
     markup = types.InlineKeyboardMarkup(row_width=1)
-    btn_share = types.InlineKeyboardButton("🚀 Share Referral Link", url=share_url)
-    markup.add(btn_share)
+    share_url = f"https://t.me/share/url?url={ref_link}&text=Unlock%20Google%20Gemini%20access!"
+    markup.add(types.InlineKeyboardButton("🚀 Share Referral Link", url=share_url))
 
     if my_count >= req_refs:
         affiliate_url = get_setting('affiliate_link', AFFILIATE_URL)
@@ -129,323 +121,210 @@ def send_dashboard(user_id, first_name):
 
     progress_bar = "█" * min(my_count, req_refs) + "░" * max(0, req_refs - my_count)
 
-    msg = (
+    text = (
         f"👋 **Welcome, {first_name}!**\n\n"
         f"Unlock **Google Gemini Access** in 2 easy steps:\n"
-        f"1️⃣ Stay inside our official group: [Join Group]({GROUP_INVITE_LINK})\n"
+        f"1️⃣ Stay inside our group: [Join Group]({GROUP_INVITE_LINK})\n"
         f"2️⃣ Invite **{req_refs} active friends** using your personal link.\n\n"
         f"📊 **Your Progress:** `[{progress_bar}] {my_count}/{req_refs}`\n"
         f"🔗 **Your Unique Referral Link:**\n`{ref_link}`"
     )
 
     if my_count >= req_refs:
-        msg += "\n\n🎉 **Target Reached!** Choose your access option below:"
+        text += "\n\n🎉 **Target Reached!** Choose your access option below:"
 
-    bot.send_message(user_id, msg, parse_mode="Markdown", reply_markup=markup)
+    bot.send_message(user_id, text, parse_mode="Markdown", reply_markup=markup)
 
-admin_states = {}
+admin_state = {}
 
-# ----------------- لوحة تحكم المشرف (أولوية عليا) -----------------
+# ----------------- أوامر المشرف (ADMIN) -----------------
 @bot.message_handler(commands=['admin'])
-def handle_admin(message):
+def cmd_admin(message):
     if message.from_user.id != ADMIN_ID:
         return
 
     markup = types.InlineKeyboardMarkup(row_width=2)
-    btn_stats = types.InlineKeyboardButton("📊 Stats Overview", callback_data="admin_stats")
-    btn_link = types.InlineKeyboardButton("🔗 Edit Affiliate URL", callback_data="admin_setlink")
-    btn_refs = types.InlineKeyboardButton("🎯 Set Required Refs", callback_data="admin_choose_refs")
-    btn_broadcast = types.InlineKeyboardButton("📢 Send Broadcast", callback_data="admin_broadcast")
-
-    markup.add(btn_stats)
-    markup.add(btn_link, btn_refs)
-    markup.add(btn_broadcast)
+    markup.add(
+        types.InlineKeyboardButton("📊 Stats Overview", callback_data="adm_stats"),
+        types.InlineKeyboardButton("🔗 Edit Affiliate URL", callback_data="adm_link")
+    )
+    markup.add(
+        types.InlineKeyboardButton("🎯 Set Required Refs", callback_data="adm_refs"),
+        types.InlineKeyboardButton("📢 Send Broadcast", callback_data="adm_bc")
+    )
 
     current_refs = get_setting('required_refs', DEFAULT_REQUIRED_REFS)
     bot.send_message(
         ADMIN_ID,
-        f"🛠 **Admin Control Panel**\n\n"
-        f"🎯 Current Goal: `{current_refs} referrals`\n"
-        f"Choose an option below to manage the bot:",
+        f"🛠 **Admin Dashboard**\nCurrent Goal: `{current_refs} referrals`",
         reply_markup=markup,
         parse_mode="Markdown"
     )
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('admin_'))
-def handle_admin_actions(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith('adm_'))
+def handle_admin_queries(call):
     if call.from_user.id != ADMIN_ID:
         return
 
     action = call.data
 
-    if action == "admin_stats":
+    if action == "adm_stats":
         cursor.execute("SELECT COUNT(*) FROM users")
         total_users = cursor.fetchone()[0]
-
         cursor.execute("SELECT SUM(referral_count) FROM users")
         total_invites = cursor.fetchone()[0] or 0
-
         req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
         cursor.execute("SELECT COUNT(*) FROM users WHERE referral_count >= ?", (req_refs,))
-        eligible = cursor.fetchone()[0]
+        completed = cursor.fetchone()[0]
 
-        stats_summary = (
-            f"📊 **System Statistics:**\n\n"
+        res = (
+            f"📊 **Statistics:**\n"
             f"👥 Total Users: `{total_users}`\n"
             f"🔗 Total Referrals: `{total_invites}`\n"
-            f"🏆 Completed Targets: `{eligible}`\n\n"
-            f"🎯 Target Required: `{req_refs} invites`\n"
-            f"🌐 Current Affiliate URL:\n{get_setting('affiliate_link', AFFILIATE_URL)}"
+            f"🏆 Completed: `{completed}`\n"
+            f"🎯 Target Required: `{req_refs}`"
         )
-        bot.edit_message_text(stats_summary, chat_id=ADMIN_ID, message_id=call.message.message_id, parse_mode="Markdown")
+        bot.edit_message_text(res, chat_id=ADMIN_ID, message_id=call.message.message_id, parse_mode="Markdown")
 
-    elif action == "admin_choose_refs":
+    elif action == "adm_refs":
         markup = types.InlineKeyboardMarkup(row_width=4)
-        btn_1 = types.InlineKeyboardButton("1 Ref", callback_data="setref_1")
-        btn_2 = types.InlineKeyboardButton("2 Refs", callback_data="setref_2")
-        btn_3 = types.InlineKeyboardButton("3 Refs", callback_data="setref_3")
-        btn_5 = types.InlineKeyboardButton("5 Refs", callback_data="setref_5")
-        btn_custom = types.InlineKeyboardButton("✏️️ Custom Number", callback_data="setref_custom")
-        markup.add(btn_1, btn_2, btn_3, btn_5)
-        markup.add(btn_custom)
-
-        bot.edit_message_text(
-            "🎯 **Select Required Referrals Count:**\nChoose a quick option or enter a custom number:",
-            chat_id=ADMIN_ID,
-            message_id=call.message.message_id,
-            reply_markup=markup,
-            parse_mode="Markdown"
+        markup.add(
+            types.InlineKeyboardButton("1", callback_data="set_1"),
+            types.InlineKeyboardButton("2", callback_data="set_2"),
+            types.InlineKeyboardButton("3", callback_data="set_3"),
+            types.InlineKeyboardButton("5", callback_data="set_5")
         )
+        bot.edit_message_text("🎯 **Select Required Referrals Count:**", chat_id=ADMIN_ID, message_id=call.message.message_id, reply_markup=markup, parse_mode="Markdown")
 
-    elif action == "admin_setlink":
-        admin_states[ADMIN_ID] = "awaiting_link"
-        bot.send_message(ADMIN_ID, "✍️ Send the new affiliate URL (must start with https://):")
+    elif action == "adm_link":
+        admin_state[ADMIN_ID] = "awaiting_link"
+        bot.send_message(ADMIN_ID, "✍ Send the new affiliate URL (starting with https://):")
 
-    elif action == "admin_broadcast":
-        admin_states[ADMIN_ID] = "awaiting_broadcast"
-        bot.send_message(ADMIN_ID, "✍️ Send the text message to broadcast to all members:")
+    elif action == "adm_bc":
+        admin_state[ADMIN_ID] = "awaiting_bc"
+        bot.send_message(ADMIN_ID, "✍️ Send the message you want to broadcast:")
 
-@bot.callback_query_handler(func=lambda call: call.data.startswith('setref_'))
-def handle_setref_buttons(call):
+@bot.callback_query_handler(func=lambda call: call.data.startswith('set_'))
+def handle_set_number(call):
     if call.from_user.id != ADMIN_ID:
         return
+    num = call.data.split('_')[1]
+    set_setting("required_refs", num)
+    bot.answer_callback_query(call.id, f"Target set to {num}!", show_alert=True)
+    bot.edit_message_text(f"✅ Required referrals target updated to: `{num}`", chat_id=ADMIN_ID, message_id=call.message.message_id, parse_mode="Markdown")
 
-    val_str = call.data.split('_')[1]
-    if val_str == "custom":
-        admin_states[ADMIN_ID] = "awaiting_refs"
-        bot.send_message(ADMIN_ID, "✍️ Send the custom required referrals number:")
-    else:
-        num = int(val_str)
-        set_setting("required_refs", str(num))
-        bot.answer_callback_query(call.id, f"✅ Set to {num} referrals!", show_alert=True)
-        bot.edit_message_text(
-            f"✅ **Target Updated Successfully!**\nNow every user needs **{num} referral(s)** to unlock rewards.",
-            chat_id=ADMIN_ID,
-            message_id=call.message.message_id,
-            parse_mode="Markdown"
-        )
-
-@bot.message_handler(func=lambda msg: msg.from_user.id == ADMIN_ID and admin_states.get(ADMIN_ID) is not None)
-def handle_admin_text_inputs(message):
-    state = admin_states.get(ADMIN_ID)
-
-    if state == "awaiting_link":
+@bot.message_handler(func=lambda m: m.from_user.id == ADMIN_ID and admin_state.get(ADMIN_ID) is not None)
+def handle_admin_text(message):
+    st = admin_state.get(ADMIN_ID)
+    if st == "awaiting_link":
         url = message.text.strip()
-        if url.startswith("http://") or url.startswith("https://"):
+        if url.startswith("http"):
             set_setting("affiliate_link", url)
-            bot.send_message(ADMIN_ID, f"✅ Affiliate URL updated:\n{url}")
+            bot.send_message(ADMIN_ID, f"✅ URL updated:\n{url}")
         else:
-            bot.send_message(ADMIN_ID, "❌ Invalid URL format.")
-        admin_states[ADMIN_ID] = None
-
-    elif state == "awaiting_refs":
-        try:
-            val = int(message.text.strip())
-            if val > 0:
-                set_setting("required_refs", str(val))
-                bot.send_message(ADMIN_ID, f"✅ Target updated to: `{val}` referral(s)", parse_mode="Markdown")
-            else:
-                bot.send_message(ADMIN_ID, "❌ Number must be greater than 0.")
-        except ValueError:
-            bot.send_message(ADMIN_ID, "❌ Please enter a valid number.")
-        admin_states[ADMIN_ID] = None
-
-    elif state == "awaiting_broadcast":
-        content = message.text
+            bot.send_message(ADMIN_ID, "❌ Invalid format.")
+        admin_state[ADMIN_ID] = None
+    elif st == "awaiting_bc":
         cursor.execute("SELECT user_id FROM users")
-        members = cursor.fetchall()
-        delivered = 0
-
-        bot.send_message(ADMIN_ID, "⏳ Broadcasting...")
-        for row in members:
+        users = cursor.fetchall()
+        count = 0
+        for u in users:
             try:
-                bot.send_message(row[0], content)
-                delivered += 1
-                time.sleep(0.05)  # حماية من حظر تيليجرام
+                bot.send_message(u[0], message.text)
+                count += 1
+                time.sleep(0.05)
             except Exception:
                 pass
+        bot.send_message(ADMIN_ID, f"✅ Broadcast sent to `{count}` users.", parse_mode="Markdown")
+        admin_state[ADMIN_ID] = None
 
-        bot.send_message(ADMIN_ID, f"✅ Broadcast sent to `{delivered}` users!", parse_mode="Markdown")
-        admin_states[ADMIN_ID] = None
-
-# ----------------- الترحيب بالأعضاء الجدد داخل المجموعة -----------------
-@bot.message_handler(content_types=['new_chat_members'])
-def handle_new_group_member(message):
-    bot_username = bot.get_me().username
-    for user in message.new_chat_members:
-        if user.is_bot:
-            continue
-        try:
-            bot.send_message(
-                message.chat.id,
-                f"👋 Welcome {user.first_name}!\n\n"
-                f"🎁 Want free Google Gemini access? Start our official bot now:\n"
-                f"👉 @{bot_username}"
-            )
-        except Exception:
-            pass
-
-# ----------------- أمر البداية -----------------
+# ----------------- أمر البدء والمستخدمين العاديين -----------------
 @bot.message_handler(commands=['start'])
-def handle_start(message):
+def handle_user_start(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name or "Friend"
-    args = message.text.split()
+    parts = message.text.split()
     req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
 
     cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-    existing_user = cursor.fetchone()
+    user = cursor.fetchone()
 
-    if not existing_user:
-        referrer_id = None
-        if len(args) > 1:
-            try:
-                candidate_id = int(args[1])
-                if candidate_id != user_id:
-                    referrer_id = candidate_id
-            except ValueError:
-                pass
+    if not user:
+        ref_id = None
+        if len(parts) > 1 and parts[1].isdigit():
+            cid = int(parts[1])
+            if cid != user_id:
+                ref_id = cid
 
-        cursor.execute("INSERT INTO users (user_id, first_name, referrer_id) VALUES (?, ?, ?)",
-                       (user_id, first_name, referrer_id))
+        cursor.execute("INSERT INTO users (user_id, first_name, referrer_id) VALUES (?, ?, ?)", (user_id, first_name, ref_id))
         conn.commit()
 
-        if referrer_id:
-            cursor.execute("UPDATE users SET referral_count = referral_count + 1 WHERE user_id = ?", (referrer_id,))
+        if ref_id:
+            cursor.execute("UPDATE users SET referral_count = referral_count + 1 WHERE user_id = ?", (ref_id,))
             conn.commit()
+            try:
+                cursor.execute("SELECT referral_count FROM users WHERE user_id = ?", (ref_id,))
+                c = cursor.fetchone()[0]
+                bot.send_message(ref_id, f"🎉 A friend joined using your link! Progress: `{c}/{req_refs}`", parse_mode="Markdown")
+                if c >= req_refs:
+                    bot.send_message(ref_id, "🏆 Target achieved! Claim your reward below:", reply_markup=reward_keyboard())
+            except Exception:
+                pass
 
-            cursor.execute("SELECT referral_count, reward_claimed FROM users WHERE user_id = ?", (referrer_id,))
-            ref_data = cursor.fetchone()
-            if ref_data:
-                count, claimed = ref_data
-                try:
-                    bar = "█" * min(count, req_refs) + "░" * max(0, req_refs - count)
-                    bot.send_message(
-                        referrer_id,
-                        f"🎉 **New Referral Joined!**\n"
-                        f"A friend joined via your invite link.\n\n"
-                        f"📊 Progress: `[{bar}] {count}/{req_refs}`"
-                    )
-                    if count >= req_refs and claimed == 0:
-                        bot.send_message(
-                            referrer_id,
-                            f"🏆 **Goal Achieved!**\n"
-                            f"You have referred {req_refs} friends.\n"
-                            f"Select your access option below:",
-                            reply_markup=get_reward_markup()
-                        )
-                except Exception:
-                    pass
-
-    # فحص الاشتراك الإجباري
-    if not is_member_of_group(GROUP_CHAT_ID, user_id):
+    if not is_member(user_id):
         markup = types.InlineKeyboardMarkup()
-        btn_group = types.InlineKeyboardButton("👥 Join Group First", url=GROUP_INVITE_LINK)
-        btn_verify = types.InlineKeyboardButton("✅ I Have Joined (Verify)", callback_data="verify_group")
-        markup.add(btn_group)
-        markup.add(btn_verify)
-
-        verification_text = (
-            f"Hello {first_name}! 🚀\n\n"
-            f"⚠️ **Access Required:**\n"
-            f"Please join our community group before activating the bot:\n\n"
-            f"1. Click the button below to join the group.\n"
-            f"2. Return here and tap **I Have Joined (Verify)**."
-        )
-        bot.send_message(user_id, verification_text, parse_mode="Markdown", reply_markup=markup)
+        markup.add(types.InlineKeyboardButton("👥 Join Group First", url=GROUP_INVITE_LINK))
+        markup.add(types.InlineKeyboardButton("✅ I Have Joined (Verify)", callback_data="verify_join"))
+        bot.send_message(user_id, f"Hello {first_name}! 🚀\nPlease join our group to activate the bot:", reply_markup=markup)
         return
 
-    bot.send_message(user_id, "✅ Community membership verified!", reply_markup=get_main_keyboard())
+    bot.send_message(user_id, "✅ Community membership verified!", reply_markup=main_keyboard())
     send_dashboard(user_id, first_name)
 
-@bot.callback_query_handler(func=lambda call: call.data == "verify_group")
-def handle_verification_callback(call):
+@bot.callback_query_handler(func=lambda call: call.data == "verify_join")
+def verify_join_callback(call):
     user_id = call.from_user.id
     first_name = call.from_user.first_name or "Friend"
-
-    if is_member_of_group(GROUP_CHAT_ID, user_id):
+    if is_member(user_id):
         try:
-            bot.delete_message(chat_id=user_id, message_id=call.message.message_id)
+            bot.delete_message(user_id, call.message.message_id)
         except Exception:
             pass
-        bot.send_message(user_id, "🎉 Verified successfully!", reply_markup=get_main_keyboard())
+        bot.send_message(user_id, "🎉 Verified successfully!", reply_markup=main_keyboard())
         send_dashboard(user_id, first_name)
     else:
-        bot.answer_callback_query(call.id, "❌ You haven't joined yet. Please join the group and retry.", show_alert=True)
+        bot.answer_callback_query(call.id, "❌ Please join the group first!", show_alert=True)
 
-# ----------------- معالجة أزرار المستخدم مع فحص بقاء العضو -----------------
-@bot.message_handler(func=lambda msg: msg.text and any(w in msg.text.lower() for w in ['referral', 'progress', 'claim']))
-def handle_quick_buttons(message):
+# ----------------- أزرار الكيبورد السفلية -----------------
+@bot.message_handler(func=lambda msg: True and not msg.text.startswith('/'))
+def handle_menu_clicks(message):
     user_id = message.from_user.id
     first_name = message.from_user.first_name or "Friend"
     text = message.text.lower()
     req_refs = int(get_setting('required_refs', DEFAULT_REQUIRED_REFS))
 
-    if not is_member_of_group(GROUP_CHAT_ID, user_id):
-        handle_start(message)
+    if not is_member(user_id):
+        handle_user_start(message)
         return
 
-    cursor.execute("SELECT referral_count FROM users WHERE user_id = ?", (user_id,))
-    row = cursor.fetchone()
-    count = row[0] if row else 0
-
     if 'claim' in text:
+        cursor.execute("SELECT referral_count FROM users WHERE user_id = ?", (user_id,))
+        row = cursor.fetchone()
+        count = row[0] if row else 0
+
         if count >= req_refs:
-            bot.send_message(
-                user_id,
-                "🎉 **Congratulations!** Your reward options are unlocked.\n\n"
-                "• **Free Access:** Start using Google Gemini directly.\n"
-                "• **Gemini Pro:** Exclusive partner offer for Pro upgrades.",
-                reply_markup=get_reward_markup(),
-                parse_mode="Markdown"
-            )
+            bot.send_message(user_id, "🎉 Choose your access option below:", reply_markup=reward_keyboard())
         else:
-            remaining = req_refs - count
-            bot.send_message(
-                user_id,
-                f"🔒 **Locked!** You need **{remaining} more referral(s)** to unlock access.",
-                parse_mode="Markdown"
-            )
+            bot.send_message(user_id, f"🔒 Locked! You need **{req_refs - count} more referral(s)**.", parse_mode="Markdown")
     else:
         send_dashboard(user_id, first_name)
 
-# ----------------- دورة التشغيل المحمية لتفادي أخطاء 409 -----------------
+# ----------------- نقطة التشغيل -----------------
 if __name__ == "__main__":
     proc = Process(target=run_web_server)
     proc.daemon = True
     proc.start()
 
-    print("Bot is starting up...")
-
-    while True:
-        try:
-            bot.remove_webhook(drop_pending_updates=True)
-            bot.polling(none_stop=True, skip_pending=True, timeout=20)
-        except ApiTelegramException as e:
-            if e.error_code == 409:
-                print("Old instance still active, waiting 5 seconds...")
-                time.sleep(5)
-            else:
-                time.sleep(3)
-        except Exception:
-            time.sleep(3)
+    bot.remove_webhook()
+    print("Bot is polling with new token...")
+    bot.infinity_polling(skip_pending=True)
